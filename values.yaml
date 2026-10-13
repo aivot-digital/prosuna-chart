@@ -1,0 +1,174 @@
+# Public hostname without a scheme or path. All public URLs use https://<Hostname>.
+Hostname: hostname
+
+# Full image references, so mirrors and private registries work.
+Images:
+  # Keep in sync with appVersion in Chart.yaml.
+  Prosuna: ghcr.io/aivot-digital/gover-next:5.0.0-alpha-192
+  Keycloak: ghcr.io/aivot-digital/keycloak-egov-plugins:26.7.4.0
+  KeycloakSetup: ghcr.io/aivot-digital/keycloak-egov-plugins-setup:0.0.28
+  # CloudNativePG PostgreSQL image. The standard flavour has no Barman Cloud binaries: backups run
+  # in the sidecar of the Barman Cloud Plugin.
+  Postgres: ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-standard-trixie
+  Rabbitmq: docker.io/library/rabbitmq:4.3.6-management
+  Redis: docker.io/library/redis:8.10.2-alpine
+  Clamav: docker.io/clamav/clamav:1.5.4-debian
+  Gotenberg: docker.io/gotenberg/gotenberg:8.37.0
+
+# Pull secrets for every pod, e.g. [{name: regcred}]. Docker Hub limits anonymous pulls per IP
+# address, which shared cloud egress addresses reach quickly.
+ImagePullSecrets: []
+
+# Secrets of Prosuna and Keycloak, stored by the chart in the Secret "prosuna". To manage that
+# Secret yourself, for example with Sealed Secrets or External Secrets, set ExistingSecret to its
+# name. It must contain the keys below; the values here are then ignored.
+Secrets:
+  ExistingSecret: ""
+  # Encrypts sensitive data in Prosuna; at least 32 characters. Never change it once set: data
+  # encrypted with the old key becomes unreadable.
+  SecretsKey: ""
+  # Signs captcha challenges; at least 32 characters.
+  CaptchaKey: ""
+  # SMTP password for Prosuna and Keycloak.
+  SmtpPassword: ""
+  # Temporary Keycloak admin "admin", created by Keycloak and disabled by the setup Job.
+  KeycloakBootstrapAdminPassword: ""
+  # Permanent Keycloak admin Keycloak.AdminUsername, created by the setup Job. Keycloak's password
+  # policy: at least 12 characters with an uppercase letter, a lowercase letter, a digit and a
+  # special character; it must not contain the username, equal the e-mail address or appear in
+  # Keycloak's 100k_passwords.txt blacklist.
+  KeycloakAdminPassword: ""
+  # Client secret the setup Job authenticates with; at least 32 random characters.
+  KeycloakDeploymentClientSecret: ""
+  # Client secret Prosuna manages Keycloak users with; at least 32 random characters.
+  KeycloakBackendClientSecret: ""
+
+Prosuna:
+  # Where users find help and support.
+  SupportUrl: https://support.mail.invalid
+  # Receives error reports if all other reporting measures fail.
+  ReportMail: report@mail.invalid
+  # Comma-separated e-mail addresses. While Prosuna has no admin, the first staff user signing in
+  # with one of them becomes admin. This is not a Keycloak admin.
+  BootstrapAdminMail: admin@mail.invalid
+  # Sentry DSNs for error reporting; may be empty.
+  SentryDsnServer: ""
+  SentryDsnWebApp: ""
+  # Size of the volume for uploaded assets and attachments (/app/data).
+  Storage: 10Gi
+  # Additional environment variables for the API, as in a container spec. They override the
+  # chart's settings of the same name, e.g. PROSUNA_SMTP_TLS, PROSUNA_DB_MAX_POOL_SIZE or
+  # SPRING_RABBITMQ_VIRTUAL_HOST.
+  ExtraEnv: []
+
+Keycloak:
+  AdminUsername: sysadmin
+  AdminEmail: admin@mail.invalid
+  # Additional environment variables for the Keycloak server, e.g. KC_LOG_LEVEL.
+  ExtraEnv: []
+
+# Outgoing mail of Prosuna and Keycloak. The password is Secrets.SmtpPassword.
+Smtp:
+  Host: smtp.mail.invalid
+  Port: 587
+  Username: username
+  From: no-reply@mail.invalid
+  Name: Prosuna
+
+# Backing services. Leave Host empty and the chart deploys the service; set Host to use an
+# existing one instead. Host, Port, Secret and Tls apply only to existing services. Secret names
+# a Secret with the keys "username" and "password", the format of the Secrets that CloudNativePG,
+# the RabbitMQ operator and SAP BTP service bindings create.
+
+# Each database runs in a CloudNativePG cluster of its own (postgres-prosuna, postgres-keycloak),
+# which creates the database, its owner and the owner's credentials. For an existing server,
+# create the database and its owner beforehand; Prosuna's owner must be allowed to create the
+# pg_trgm extension. Database names the database in both cases.
+Postgres:
+  Prosuna:
+    Host: ""
+    Port: 5432
+    Database: prosuna
+    Secret: ""
+  Keycloak:
+    Host: ""
+    Port: 5432
+    Database: keycloak
+    Secret: ""
+  # The settings below apply to the CloudNativePG clusters, to each of them.
+  Instances: 1
+  Storage: 8Gi
+  # Continuous WAL archiving and scheduled base backups through the Barman Cloud Plugin, which must
+  # be installed in the cluster. See README.md.
+  Backup:
+    # ObjectStore configuration (spec.configuration of barmancloud.cnpg.io/v1 ObjectStore),
+    # passed through as is: S3, Azure Blob Storage or Google Cloud Storage. Empty disables backups.
+    ObjectStore: {}
+    # Cron expression with six fields, starting with seconds; evaluated in UTC.
+    Schedule: "0 0 2 * * *"
+    # How long backups are kept, e.g. 30d, 4w or 6m.
+    Retention: 30d
+    # Backups go to <destinationPath>/<Prefix>-prosuna and <Prefix>-keycloak; empty means the
+    # release namespace. New database clusters need paths without earlier backups: change it, for
+    # example to testing-2, when reinstalling into a namespace whose old backups still exist.
+    Prefix: ""
+    # Prefix of the backups the clusters restore when they are created, e.g. "testing" to start a
+    # copy of that environment. It must differ from Prefix.
+    RecoverFrom: ""
+
+# RabbitmqCluster "rabbitmq" of the RabbitMQ Cluster Operator, or an existing broker.
+Rabbitmq:
+  Host: ""
+  Port: 5672
+  Secret: ""
+  Tls: false
+  # The settings below apply to the chart's broker. Its queues are quorum queues, which survive
+  # the loss of one node with 3 replicas.
+  Replicas: 1
+  Storage: 10Gi
+
+Redis:
+  Host: ""
+  Port: 6379
+  Database: 0
+  # Optional: a Secret with the key "password", and "username" for ACL users.
+  Secret: ""
+  Tls: false
+
+Clamav:
+  Host: ""
+  Port: 3310
+
+# An existing Gotenberg must restrict Chromium the way templates/gotenberg.yaml does.
+Gotenberg:
+  Host: ""
+  Port: 3000
+
+Ingress:
+  # traefik: Traefik IngressRoutes with a cert-manager certificate.
+  # kyma:    Kyma APIRule on an Istio gateway.
+  # none:    route https://<Hostname> yourself: /idp to keycloak:8080, /api to prosuna-api:8080
+  #          and everything else to prosuna-app:8080, keeping the paths and sending X-Forwarded-*
+  #          headers.
+  Type: traefik
+  # traefik: cert-manager ClusterIssuer for the TLS certificate.
+  ClusterIssuer: letsencrypt
+  # kyma: Istio gateway as <namespace>/<name>. kyma-gateway serves hostnames under the cluster
+  # domain; a custom domain needs a gateway of its own, see README.md.
+  Gateway: kyma-system/kyma-gateway
+
+# Limit which pods may connect to the chart's workloads. Takes effect only if the cluster's CNI
+# enforces NetworkPolicies.
+NetworkPolicy:
+  Enabled: true
+  # NetworkPolicy peers ("from" entries) matching the ingress controller's pods. Empty: Traefik
+  # pods in any namespace for Ingress.Type traefik, the Istio ingress gateway for kyma. Required
+  # for none.
+  IngressFrom: []
+
+# PodMonitors for the databases and a ServiceMonitor for the broker. Requires the Prometheus
+# Operator CRDs, for example from kube-prometheus-stack; Kyma has none.
+Monitoring:
+  Enabled: false
+  # Labels the Prometheus instance selects monitors by, e.g. release: kube-prometheus.
+  Labels: {}

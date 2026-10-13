@@ -1,0 +1,33 @@
+# SAP BTP Kyma runtime with the CloudNativePG (plus Barman Cloud Plugin) and RabbitMQ operators
+# installed. kyma-gateway serves hostnames under the cluster domain.
+Hostname: prosuna.c-1a2b3c4.kyma.ondemand.com
+
+# Docker Hub limits anonymous pulls per address, which Kyma's shared egress reaches quickly.
+ImagePullSecrets:
+  - name: dockerhub
+
+# Created beforehand with the keys listed under Secrets in values.yaml.
+Secrets:
+  ExistingSecret: prosuna-secrets
+
+Ingress:
+  Type: kyma
+
+Postgres:
+  Instances: 3
+  Backup:
+    # The Secret postgres-backup-azure must exist in the release namespace.
+    ObjectStore:
+      destinationPath: https://prosunabackups.blob.core.windows.net/postgres
+      azureCredentials:
+        storageAccount:
+          name: postgres-backup-azure
+          key: AZURE_STORAGE_ACCOUNT
+        storageKey:
+          name: postgres-backup-azure
+          key: AZURE_STORAGE_KEY
+      wal:
+        compression: gzip
+
+Rabbitmq:
+  Replicas: 3

@@ -1,0 +1,28 @@
+# Cluster with Traefik, cert-manager, CloudNativePG with the Barman Cloud Plugin, the RabbitMQ
+# Cluster Operator and kube-prometheus-stack, like the k3d testing cluster. Pass the secrets in
+# a separate file, for example:
+#   helm upgrade --install testing . -n testing -f examples/operator-cluster.yaml -f values.local.yaml
+Hostname: prosuna.example.org
+
+Postgres:
+  Backup:
+    # The Secret postgres-backup-s3 must exist in the release namespace.
+    ObjectStore:
+      destinationPath: s3://prosuna-backups/
+      endpointURL: https://s3.eu-central-1.amazonaws.com
+      s3Credentials:
+        accessKeyId:
+          name: postgres-backup-s3
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: postgres-backup-s3
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+
+Monitoring:
+  Enabled: true
+  Labels:
+    release: kube-prometheus

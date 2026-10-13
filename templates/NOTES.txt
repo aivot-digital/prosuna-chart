@@ -1,0 +1,22 @@
+Prosuna staff app:      https://{{ .Values.Hostname }}/staff
+Keycloak admin console: https://{{ .Values.Hostname }}/idp/admin/
+Environment namespace:  {{ .Release.Namespace }}
+
+Backing services:
+  PostgreSQL (Prosuna):  {{ .Values.Postgres.Prosuna.Host | default "CloudNativePG cluster postgres-prosuna" }}
+  PostgreSQL (Keycloak): {{ .Values.Postgres.Keycloak.Host | default "CloudNativePG cluster postgres-keycloak" }}
+  RabbitMQ:              {{ .Values.Rabbitmq.Host | default "RabbitmqCluster rabbitmq" }}
+  Redis:                 {{ .Values.Redis.Host | default "Deployment redis" }}
+  ClamAV:                {{ .Values.Clamav.Host | default "Deployment clamav" }}
+  Gotenberg:             {{ .Values.Gotenberg.Host | default "Deployment gotenberg" }}
+
+Check the pods and the realm setup of this Helm deployment:
+  kubectl get pods --namespace {{ .Release.Namespace }}
+  kubectl logs job/keycloak-setup-{{ .Release.Revision }} --namespace {{ .Release.Namespace }} --container setup
+
+Setup runs on each Helm install or upgrade. Use --wait --wait-for-jobs --timeout 20m
+to wait for the server and setup Job to complete.
+{{- if and (not .Values.Postgres.Backup.ObjectStore) (not (and .Values.Postgres.Prosuna.Host .Values.Postgres.Keycloak.Host)) }}
+
+WARNING: Postgres.Backup.ObjectStore is empty, so the chart's databases are not backed up.
+{{- end }}

@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Prosuna chart values",
+  "description": "Rejects unknown keys, missing or weak secrets and invalid service settings. Requirements that depend on other values, such as a Secret for an existing service, are checked in the templates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Hostname",
+    "Images",
+    "ImagePullSecrets",
+    "Secrets",
+    "Prosuna",
+    "Keycloak",
+    "Smtp",
+    "Postgres",
+    "Rabbitmq",
+    "Redis",
+    "Clamav",
+    "Gotenberg",
+    "Ingress",
+    "NetworkPolicy",
+    "Monitoring"
+  ],
+  "properties": {
+    "Hostname": {
+      "description": "Fully qualified hostname without a scheme or path.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$"
+    },
+    "Images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Prosuna",
+        "Keycloak",
+        "KeycloakSetup",
+        "Postgres",
+        "Rabbitmq",
+        "Redis",
+        "Clamav",
+        "Gotenberg"
+      ],
+      "properties": {
+        "Prosuna": { "$ref": "#/definitions/image" },
+        "Keycloak": { "$ref": "#/definitions/image" },
+        "KeycloakSetup": { "$ref": "#/definitions/image" },
+        "Postgres": { "$ref": "#/definitions/image" },
+        "Rabbitmq": { "$ref": "#/definitions/image" },
+        "Redis": { "$ref": "#/definitions/image" },
+        "Clamav": { "$ref": "#/definitions/image" },
+        "Gotenberg": { "$ref": "#/definitions/image" }
+      }
+    },
+    "ImagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "Secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ExistingSecret": { "type": "string" },
+        "SecretsKey": { "type": "string" },
+        "CaptchaKey": { "type": "string" },
+        "SmtpPassword": { "type": "string" },
+        "KeycloakBootstrapAdminPassword": { "type": "string" },
+        "KeycloakAdminPassword": { "type": "string" },
+        "KeycloakDeploymentClientSecret": { "type": "string" },
+        "KeycloakBackendClientSecret": { "type": "string" }
+      },
+      "if": {
+        "properties": { "ExistingSecret": { "const": "" } }
+      },
+      "then": {
+        "description": "Checked only when the chart creates the Secret. The character rules of KeycloakAdminPassword are checked in templates/secret.yaml, because schema pattern errors print the rejected value.",
+        "properties": {
+          "SecretsKey": { "$ref": "#/definitions/key" },
+          "CaptchaKey": { "$ref": "#/definitions/key" },
+          "KeycloakBootstrapAdminPassword": { "$ref": "#/definitions/password" },
+          "KeycloakAdminPassword": { "$ref": "#/definitions/password" },
+          "KeycloakDeploymentClientSecret": { "$ref": "#/definitions/key" },
+          "KeycloakBackendClientSecret": { "$ref": "#/definitions/key" }
+        }
+      }
+    },
+    "Prosuna": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["SupportUrl", "ReportMail", "BootstrapAdminMail", "SentryDsnServer", "SentryDsnWebApp", "Storage", "ExtraEnv"],
+      "properties": {
+        "SupportUrl": { "type": "string" },
+        "ReportMail": { "type": "string", "minLength": 1 },
+        "BootstrapAdminMail": { "type": "string" },
+        "SentryDsnServer": { "type": "string" },
+        "SentryDsnWebApp": { "type": "string" },
+        "Storage": { "$ref": "#/definitions/quantity" },
+        "ExtraEnv": { "$ref": "#/definitions/env" }
+      }
+    },
+    "Keycloak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["AdminUsername", "AdminEmail", "ExtraEnv"],
+      "properties": {
+        "AdminUsername": { "type": "string", "minLength": 1 },
+        "AdminEmail": { "type": "string", "minLength": 1 },
+        "ExtraEnv": { "$ref": "#/definitions/env" }
+      }
+    },
+    "Smtp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Host", "Port", "Username", "From", "Name"],
+      "properties": {
+        "Host": { "type": "string", "minLength": 1 },
+        "Port": { "$ref": "#/definitions/port" },
+        "Username": { "type": "string" },
+        "From": { "type": "string", "minLength": 1 },
+        "Name": { "type": "string" }
+      }
+    },
+    "Postgres": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Prosuna", "Keycloak", "Instances", "Storage", "Backup"],
+      "properties": {
+        "Prosuna": { "$ref": "#/definitions/database" },
+        "Keycloak": { "$ref": "#/definitions/database" },
+        "Instances": { "type": "integer", "minimum": 1 },
+        "Storage": { "$ref": "#/definitions/quantity" },
+        "Backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ObjectStore", "Schedule", "Retention", "Prefix", "RecoverFrom"],
+          "properties": {
+            "ObjectStore": {
+              "description": "Barman Cloud ObjectStore spec.configuration; validated by the plugin's CRD.",
+              "type": "object"
+            },
+            "Schedule": { "type": "string", "minLength": 1 },
+            "Retention": { "type": "string", "pattern": "^[1-9][0-9]*[dwm]$" },
+            "Prefix": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$" },
+            "RecoverFrom": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$" }
+          }
+        }
+      }
+    },
+    "Rabbitmq": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Host", "Port", "Secret", "Tls", "Replicas", "Storage"],
+      "properties": {
+        "Host": { "type": "string" },
+        "Port": { "$ref": "#/definitions/port" },
+        "Secret": { "type": "string" },
+        "Tls": { "type": "boolean" },
+        "Replicas": { "type": "integer", "minimum": 1 },
+        "Storage": { "$ref": "#/definitions/quantity" }
+      }
+    },
+    "Redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Host", "Port", "Database", "Secret", "Tls"],
+      "properties": {
+        "Host": { "type": "string" },
+        "Port": { "$ref": "#/definitions/port" },
+        "Database": { "type": "integer", "minimum": 0 },
+        "Secret": { "type": "string" },
+        "Tls": { "type": "boolean" }
+      }
+    },
+    "Clamav": { "$ref": "#/definitions/service" },
+    "Gotenberg": { "$ref": "#/definitions/service" },
+    "Ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Type", "ClusterIssuer", "Gateway"],
+      "properties": {
+        "Type": { "enum": ["traefik", "kyma", "none"] },
+        "ClusterIssuer": { "type": "string" },
+        "Gateway": { "type": "string", "pattern": "^[a-z0-9-]+/[a-z0-9-]+$" }
+      }
+    },
+    "NetworkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Enabled", "IngressFrom"],
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "IngressFrom": {
+          "description": "NetworkPolicy peers. An empty peer would allow every source.",
+          "type": "array",
+          "items": { "type": "object", "minProperties": 1 }
+        }
+      }
+    },
+    "Monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Enabled", "Labels"],
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "image": { "type": "string", "minLength": 1 },
+    "key": { "type": "string", "minLength": 32 },
+    "password": { "type": "string", "minLength": 12 },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "quantity": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti)$" },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Host", "Port"],
+      "properties": {
+        "Host": { "type": "string" },
+        "Port": { "$ref": "#/definitions/port" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Host", "Port", "Database", "Secret"],
+      "properties": {
+        "Host": { "type": "string" },
+        "Port": { "$ref": "#/definitions/port" },
+        "Database": {
+          "description": "Also the owner's name in a CloudNativePG cluster.",
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]*$"
+        },
+        "Secret": { "type": "string" }
+      }
+    }
+  }
+}

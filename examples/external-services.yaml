@@ -1,0 +1,42 @@
+# Every backing service already exists. Each Secret holds the keys "username" and "password"
+# (Redis: "password", optionally "username"); see README.md.
+Hostname: prosuna.example.org
+
+Postgres:
+  Prosuna:
+    Host: postgres.example.internal
+    Secret: prosuna-db
+  Keycloak:
+    Host: postgres.example.internal
+    Secret: keycloak-db
+
+Rabbitmq:
+  Host: rabbitmq.example.internal
+  Port: 5671
+  Secret: prosuna-rabbitmq
+  Tls: true
+
+Redis:
+  Host: redis.example.internal
+  Port: 6380
+  Secret: prosuna-redis
+  Tls: true
+
+Clamav:
+  Host: clamav.example.internal
+
+Gotenberg:
+  Host: gotenberg.example.internal
+
+# Route https://<Hostname> with your own ingress controller, see Ingress.Type in values.yaml.
+Ingress:
+  Type: none
+
+NetworkPolicy:
+  IngressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx

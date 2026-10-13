@@ -1,0 +1,55 @@
+{{- if eq .Values.Ingress.Type "kyma" }}
+# APIRules route only to pods in the Istio service mesh, so prosuna-app, prosuna-api, keycloak and
+# the setup Job carry the sidecar.istio.io/inject label.
+apiVersion: gateway.kyma-project.io/v2
+kind: APIRule
+metadata:
+  name: prosuna
+  namespace: {{ .Release.Namespace }}
+spec:
+  gateway: {{ .Values.Ingress.Gateway }}
+  hosts:
+    - {{ .Values.Hostname | quote }}
+  # Uploads of up to 500 MB need more than the default of 180 seconds on slow connections.
+  timeout: 900
+  # Without a CORS policy the API Gateway removes CORS headers from responses. Web fonts must be
+  # loadable from other origins (/assets/fonts in the Caddyfile). The policy applies to the whole
+  # host, so it allows only GET and HEAD requests without credentials.
+  corsPolicy:
+    allowOrigins:
+      - regex: ".*"
+    allowMethods: ["GET", "HEAD"]
+  # Earlier rules take precedence, so the catch-all comes last. All paths keep their prefixes.
+  rules:
+    - path: /idp
+      methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      noAuth: true
+      service:
+        name: keycloak
+        port: 8080
+    - path: /idp/{**}
+      methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      noAuth: true
+      service:
+        name: keycloak
+        port: 8080
+    - path: /api
+      methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      noAuth: true
+      service:
+        name: prosuna-api
+        port: 8080
+    - path: /api/{**}
+      methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      noAuth: true
+      service:
+        name: prosuna-api
+        port: 8080
+    # Staff and customer traffic share the same web application container.
+    - path: /*
+      methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      noAuth: true
+      service:
+        name: prosuna-app
+        port: 8080
+{{- end }}

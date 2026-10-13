@@ -1,0 +1,227 @@
+{{- define "prosuna.keycloak.config" -}}
+{{- $db := .Values.Postgres.Keycloak }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak
+  namespace: {{ .Release.Namespace }}
+data:
+  KC_HOSTNAME: "https://{{ .Values.Hostname }}/idp"
+  KC_HTTP_RELATIVE_PATH: "/idp"
+  KC_HTTP_ENABLED: "true"
+  KC_HTTP_PORT: "8080"
+  KC_PROXY_HEADERS: "xforwarded"
+  KC_HEALTH_ENABLED: "true"
+  KC_HTTP_MANAGEMENT_PORT: "9000"
+  KC_HTTP_MANAGEMENT_RELATIVE_PATH: "/"
+  KC_HTTP_MANAGEMENT_SCHEME: "http"
+  KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+  KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+  KC_DB: "postgres"
+  KC_DB_URL_HOST: {{ $db.Host | default "postgres-keycloak-rw" | quote }}
+  KC_DB_URL_PORT: {{ ternary 5432 $db.Port (empty $db.Host) | quote }}
+  KC_DB_URL_DATABASE: {{ $db.Database | quote }}
+  KC_FEATURES: "transient-users,update-email,hostname:v2"
+{{- end }}
+{{- $secret := .Values.Secrets.ExistingSecret | default "prosuna" }}
+{{- /* Credentials of the chart's database come from the Secret CloudNativePG creates. */}}
+{{- $dbSecret := "postgres-keycloak-app" }}
+{{- if .Values.Postgres.Keycloak.Host }}
+{{- $dbSecret = required "Postgres.Keycloak.Secret is required when Postgres.Keycloak.Host is set" .Values.Postgres.Keycloak.Secret }}
+{{- end }}
+{{ include "prosuna.keycloak.config" . }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      # Hash only the configuration loaded by the server, excluding the setup Job.
+      annotations:
+        checksum/config: {{ include "prosuna.keycloak.config" . | sha256sum | quote }}
+        checksum/secrets: {{ toJson .Values.Secrets | sha256sum | quote }}
+      labels:
+        app: keycloak
+        {{- if eq .Values.Ingress.Type "kyma" }}
+        # APIRules route only to pods in the Istio service mesh.
+        sidecar.istio.io/inject: "true"
+        {{- end }}
+    spec:
+      {{- with .Values.ImagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: keycloak
+          image: {{ .Values.Images.Keycloak | quote }}
+          args: [ "start" ]
+          ports:
+            - name: keycloak
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          # The Keycloak image sizes its heap at 70% of the memory limit.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 1536Mi
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            failureThreshold: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            periodSeconds: 10
+            timeoutSeconds: 5
+          env:
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $dbSecret }}
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $dbSecret }}
+                  key: password
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: KeycloakBootstrapAdminPassword
+            {{- with .Values.Keycloak.ExtraEnv }}
+            # Explicit env entries take precedence over the ConfigMap below.
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: keycloak
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - name: keycloak
+      port: 8080
+      targetPort: keycloak
+      protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-setup
+  namespace: {{ .Release.Namespace }}
+data:
+  HOSTNAME: "https://{{ .Values.Hostname }}"
+
+  KEYCLOAK_URL: "http://keycloak:8080/idp"
+
+  KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME: "admin"
+
+  KEYCLOAK_ADMIN_USERNAME: {{ .Values.Keycloak.AdminUsername | quote }}
+  KEYCLOAK_ADMIN_EMAIL: {{ .Values.Keycloak.AdminEmail | quote }}
+
+  KEYCLOAK_DEPLOYMENT_CLIENT_NAME: "deployment"
+  KEYCLOAK_AVAILABILITYCHECK_ENABLED: "true"
+  KEYCLOAK_AVAILABILITYCHECK_TIMEOUT: "600s"
+
+  LOGGING_LEVEL_HTTP: "ERROR"
+
+  SMTP_HOST: {{ .Values.Smtp.Host | quote }}
+  SMTP_PORT: {{ .Values.Smtp.Port | quote }}
+  SMTP_USERNAME: {{ .Values.Smtp.Username | quote }}
+  SMTP_FROM: {{ .Values.Smtp.From | quote }}
+  SMTP_FROM_DISPLAY: {{ .Values.Smtp.Name | quote }}
+---
+# Setup needs a running Keycloak server. A new Job runs on each Helm deployment; Helm deletes the
+# previous one because its name is no longer part of the release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-setup-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app: keycloak-setup
+        {{- if eq .Values.Ingress.Type "kyma" }}
+        # Keycloak runs in the mesh, so the Job joins it too. The Job completes only with Istio's
+        # native sidecars (the default since Istio 1.27), which stop with the setup container.
+        sidecar.istio.io/inject: "true"
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.ImagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: setup
+          image: {{ .Values.Images.KeycloakSetup | quote }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          env:
+            # Size the heap from the memory limit; the JVM default of 25% is too small.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=70"
+            - name: KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: KeycloakBootstrapAdminPassword
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: KeycloakAdminPassword
+            - name: KEYCLOAK_DEPLOYMENT_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: KeycloakDeploymentClientSecret
+            - name: BACKEND_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: KeycloakBackendClientSecret
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: SmtpPassword
+          envFrom:
+            - configMapRef:
+                name: keycloak-setup

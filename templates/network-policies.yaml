@@ -1,0 +1,147 @@
+{{- if .Values.NetworkPolicy.Enabled }}
+{{- $ingressFrom := .Values.NetworkPolicy.IngressFrom }}
+{{- if and (not $ingressFrom) (eq .Values.Ingress.Type "traefik") }}
+{{- $ingressFrom = fromYamlArray `
+- namespaceSelector: {}
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+` }}
+{{- else if and (not $ingressFrom) (eq .Values.Ingress.Type "kyma") }}
+{{- $ingressFrom = fromYamlArray `
+- namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: istio-system
+  podSelector:
+    matchLabels:
+      istio: ingressgateway
+` }}
+{{- else if not $ingressFrom }}
+{{- fail "NetworkPolicy.IngressFrom is required when Ingress.Type is none" }}
+{{- end }}
+# Each policy lists the only pods allowed to connect to one of the chart's workloads, mirroring
+# the reference compose networks. Kubelet probes from the pod's own node are always allowed.
+# Ports that are not listed, such as Keycloak's management port 9000, are reachable by nobody
+# else. Egress is not restricted. The pods of the operators' database and broker clusters have
+# no policy, because their operators and replication need to reach them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prosuna-app
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: prosuna-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+      ports:
+        - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prosuna-api
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: prosuna-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+      ports:
+        - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    # Public /idp traffic, plus the API and the setup Job using the internal URL.
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+        - podSelector:
+            matchLabels:
+              app: prosuna-api
+        - podSelector:
+            matchLabels:
+              app: keycloak-setup
+      ports:
+        - port: 8080
+{{- if not .Values.Clamav.Host }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clamav
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: clamav
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prosuna-api
+      ports:
+        - port: 3310
+{{- end }}
+{{- if not .Values.Gotenberg.Host }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gotenberg
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: gotenberg
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prosuna-api
+      ports:
+        - port: 3000
+{{- end }}
+{{- if not .Values.Redis.Host }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prosuna-api
+      ports:
+        - port: 6379
+{{- end }}
+{{- end }}

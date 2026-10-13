@@ -1,0 +1,7 @@
+apiVersion: v2
+name: prosuna
+description: Prosuna with Keycloak, and PostgreSQL, RabbitMQ, Redis, ClamAV and Gotenberg deployed by the chart or supplied externally
+type: application
+version: 0.3.0
+# Keep in sync with Images.Prosuna in values.yaml.
+appVersion: "5.0.0-alpha-192"

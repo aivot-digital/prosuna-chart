@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prosuna-app
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prosuna-app
+  template:
+    metadata:
+      labels:
+        app: prosuna-app
+        {{- if eq .Values.Ingress.Type "kyma" }}
+        # APIRules route only to pods in the Istio service mesh.
+        sidecar.istio.io/inject: "true"
+        {{- end }}
+    spec:
+      {{- with .Values.ImagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: prosuna-app
+          image: {{ .Values.Images.Prosuna | quote }}
+          args: [ "web" ]
+          ports:
+            - name: prosuna-app
+              containerPort: 8080
+          # nginx serving the built web app.
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          startupProbe:
+            httpGet:
+              path: /
+              port: prosuna-app
+            failureThreshold: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: prosuna-app
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: prosuna-app
+            periodSeconds: 10
+            timeoutSeconds: 5
+          env:
+            - name: PROSUNA_HOSTNAME
+              value: "https://{{ .Values.Hostname }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prosuna-app
+  namespace: {{ .Release.Namespace }}
+  {{- if eq .Values.Ingress.Type "traefik" }}
+  annotations:
+    # The standard Ingress must dial the ClusterIP to retry during pod startup.
+    traefik.ingress.kubernetes.io/service.nativelb: "true"
+    traefik.ingress.kubernetes.io/service.serverstransport: {{ printf "%s-app-upstream@kubernetescrd" .Release.Namespace | quote }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    app: prosuna-app
+  ports:
+    - name: prosuna-app
+      port: 8080
+      targetPort: prosuna-app
+      protocol: TCP

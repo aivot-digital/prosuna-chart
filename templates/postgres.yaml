@@ -1,0 +1,120 @@
+{{- $backup := .Values.Postgres.Backup }}
+{{- $prefix := $backup.Prefix | default .Release.Namespace }}
+{{- if and $backup.RecoverFrom (not $backup.ObjectStore) }}
+{{- fail "Postgres.Backup.RecoverFrom needs Postgres.Backup.ObjectStore" }}
+{{- end }}
+{{- if eq $backup.RecoverFrom $prefix }}
+{{- fail "Postgres.Backup.RecoverFrom must differ from Postgres.Backup.Prefix (default: the release namespace): new clusters need backup paths of their own" }}
+{{- end }}
+{{- range $name, $db := dict "prosuna" .Values.Postgres.Prosuna "keycloak" .Values.Postgres.Keycloak }}
+{{- if not $db.Host }}
+---
+# The operator creates the database, its owner and the Secret postgres-{{ $name }}-app with the
+# owner's credentials, which the application reads. Clients connect to postgres-{{ $name }}-rw.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  instances: {{ $.Values.Postgres.Instances }}
+  # Pinned so the server version only changes on purpose.
+  imageName: {{ $.Values.Images.Postgres | quote }}
+  {{- with $.Values.ImagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  primaryUpdateStrategy: unsupervised
+  # Per instance.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  storage:
+    size: {{ $.Values.Postgres.Storage }}
+  bootstrap:
+    {{- if $backup.RecoverFrom }}
+    # Restore the latest backup under the RecoverFrom prefix. The operator then sets the owner's
+    # password to the one in postgres-{{ $name }}-app.
+    recovery:
+      source: origin
+      database: {{ $db.Database }}
+      owner: {{ $db.Database }}
+    {{- else }}
+    initdb:
+      database: {{ $db.Database }}
+      owner: {{ $db.Database }}
+    {{- end }}
+  {{- if $backup.RecoverFrom }}
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: postgres-backup
+          serverName: {{ $backup.RecoverFrom }}-{{ $name }}
+  {{- end }}
+  {{- if $backup.ObjectStore }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: postgres-backup
+        # Both clusters share the object store. The prefix, by default the namespace, keeps
+        # environments that share a bucket, and restored copies, out of each other's backups.
+        serverName: {{ $prefix }}-{{ $name }}
+  {{- end }}
+{{- if $backup.ObjectStore }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: postgres-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  cluster:
+    name: postgres-{{ $name }}
+  schedule: {{ $backup.Schedule | quote }}
+  # Take the first base backup right away, so recovery works from the start.
+  immediate: true
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}
+{{- if $.Values.Monitoring.Enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  {{- with $.Values.Monitoring.Labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: postgres-{{ $name }}
+  podMetricsEndpoints:
+    - port: metrics
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and $backup.ObjectStore (not (and .Values.Postgres.Prosuna.Host .Values.Postgres.Keycloak.Host)) }}
+---
+# Requires the Barman Cloud Plugin. Credentials referenced in the configuration must exist in the
+# release namespace.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: postgres-backup
+  namespace: {{ .Release.Namespace }}
+spec:
+  retentionPolicy: {{ $backup.Retention | quote }}
+  configuration:
+    {{- toYaml $backup.ObjectStore | nindent 4 }}
+{{- end }}

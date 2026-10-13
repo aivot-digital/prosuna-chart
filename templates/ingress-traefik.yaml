@@ -1,0 +1,164 @@
+{{- if eq .Values.Ingress.Type "traefik" }}
+# The routes mirror the reference Caddyfile.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cors-fonts
+  namespace: {{ .Release.Namespace }}
+spec:
+  headers:
+    # Caddy adds a response header without handling CORS preflight requests.
+    # Remove once the Prosuna image sends this header itself.
+    customResponseHeaders:
+      Access-Control-Allow-Origin: "*"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-security
+  namespace: {{ .Release.Namespace }}
+spec:
+  redirectRegex:
+    regex: '^https?://[^/]+/security\.txt(\?.*)?$'
+    replacement: '/.well-known/security.txt'
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: {{ .Release.Namespace }}
+spec:
+  redirectScheme:
+    scheme: https
+    port: "443"
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: retry-app
+  namespace: {{ .Release.Namespace }}
+spec:
+  retry:
+    # About 30 seconds of nominal backoff, plus jitter and connection time.
+    # Traefik 3.6 has no equivalent of Caddy's 30-second retry deadline.
+    attempts: 22
+    initialInterval: 1s
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: app-upstream
+  namespace: {{ .Release.Namespace }}
+spec:
+  forwardingTimeouts:
+    dialTimeout: 3s
+---
+# Keep a standard Ingress for cert-manager's ingress-shim and the app catch-all.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-main
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.Ingress.ClusterIssuer | quote }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "10"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-retry-app@kubernetescrd" .Release.Namespace | quote }}
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - {{ .Values.Hostname | quote }}
+      secretName: {{ printf "%s-tls-secret" .Values.Hostname | quote }}
+  rules:
+    - host: {{ .Values.Hostname | quote }}
+      http:
+        paths:
+          # Staff and customer traffic share the same web application container.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prosuna-app
+                port:
+                  number: 8080
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: app-ingress-routes
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  entryPoints:
+    - websecure
+  tls:
+    secretName: {{ printf "%s-tls-secret" .Values.Hostname | quote }}
+  routes:
+    # Explicit path boundaries are independent of the Ingress provider's
+    # strictPrefixMatching setting. All upstream paths retain their prefixes.
+    - kind: Rule
+      match: {{ printf "Host(`%s`) && (Path(`/idp`) || PathPrefix(`/idp/`))" .Values.Hostname | quote }}
+      priority: 100
+      services:
+        - name: keycloak
+          port: 8080
+    - kind: Rule
+      match: {{ printf "Host(`%s`) && (Path(`/api`) || PathPrefix(`/api/`))" .Values.Hostname | quote }}
+      priority: 100
+      middlewares:
+        - name: retry-app
+      services:
+        - name: prosuna-api
+          port: 8080
+          # Dial the ClusterIP even while no pods are ready, so retries can wait
+          # for startup instead of receiving an immediate empty-service 503.
+          nativeLB: true
+          serversTransport: app-upstream
+    - kind: Rule
+      match: {{ printf "Host(`%s`) && PathPrefix(`/assets/fonts/`)" .Values.Hostname | quote }}
+      priority: 100
+      middlewares:
+        - name: cors-fonts
+        - name: retry-app
+      services:
+        - name: prosuna-app
+          port: 8080
+          nativeLB: true
+          serversTransport: app-upstream
+    # The web app's own redirect points to its internal http://<host>:8080, so redirect here.
+    - kind: Rule
+      match: {{ printf "Host(`%s`) && Path(`/security.txt`)" .Values.Hostname | quote }}
+      priority: 100
+      middlewares:
+        - name: redirect-security
+      services:
+        # Redirects must work even while the application is unavailable.
+        - name: noop@internal
+          kind: TraefikService
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: app-ingress-http
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  entryPoints:
+    - web
+  routes:
+    - kind: Rule
+      match: {{ printf "Host(`%s`) && PathPrefix(`/`)" .Values.Hostname | quote }}
+      # cert-manager's HTTP-01 solver Ingress must outrank this redirect.
+      priority: 1
+      middlewares:
+        - name: redirect-https
+      services:
+        - name: noop@internal
+          kind: TraefikService
+{{- end }}

@@ -1,0 +1,51 @@
+{{- if not .Values.Rabbitmq.Host }}
+# The operator creates the Service "rabbitmq" and the Secret "rabbitmq-default-user" with the
+# credentials the API reads.
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rabbitmq
+  namespace: {{ .Release.Namespace }}
+spec:
+  image: {{ .Values.Images.Rabbitmq | quote }}
+  {{- with .Values.ImagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  replicas: {{ .Values.Rabbitmq.Replicas }}
+  # Per replica. Replaces the operator default of 1 CPU and 2Gi requested per replica.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  persistence:
+    storage: {{ .Values.Rabbitmq.Storage }}
+  rabbitmq:
+    # Prosuna declares its queues without a type. Quorum queues are replicated across the
+    # replicas; classic queues would live on a single node.
+    additionalConfig: |
+      default_queue_type = quorum
+{{- if .Values.Monitoring.Enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq
+  namespace: {{ .Release.Namespace }}
+  {{- with .Values.Monitoring.Labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  endpoints:
+    - port: prometheus
+      scheme: http
+      interval: 15s
+      scrapeTimeout: 14s
+{{- end }}
+{{- end }}
