@@ -146,13 +146,13 @@ spec:
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /api/actuator/health
+              path: /api/actuator/health/readiness
               port: prosuna-api
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
             httpGet:
-              path: /api/actuator/health
+              path: /api/actuator/health/liveness
               port: prosuna-api
             periodSeconds: 10
             timeoutSeconds: 5
