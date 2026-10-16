@@ -208,6 +208,9 @@ EOF
 
 ## Backup and restore
 
+RabbitMQ needs no backup: Prosuna stores pending background work in the database and publishes it
+again after the broker restarts, even when the broker comes back empty.
+
 ### Databases
 
 With `Postgres.Backup.ObjectStore` set, both database clusters archive their WAL continuously
@@ -308,8 +311,8 @@ helm upgrade --install <release> . --namespace <namespace> -f <the environment's
   moves archiving to another path; leaving `RecoverFrom` set has no effect.
 - Use the same `Secrets` as the original environment. Data encrypted with `Secrets.SecretsKey` is
   unreadable with another key.
-- RabbitMQ starts empty: background work queued at backup time is lost and may need to be
-  retried in Prosuna.
+- RabbitMQ starts empty. Prosuna continues the background work that was pending at backup time,
+  because that work is stored in the database.
 - Uploaded files are not part of the database backups; see below.
 
 For a test restore next to the live environment, also use another `Hostname`, so the copy does
@@ -320,5 +323,5 @@ not take over the live routes. The copy needs as many resources as the original.
 Uploaded assets and attachments live on the `prosuna-data` volume, which Helm keeps on uninstall.
 The chart does not back it up. Use a volume backup outside the chart, for example Velero
 file-system backups: the prosuna-api pod already requests its `data` volume with the annotation
-`backup.velero.io/backup-volumes`. The database pods carry no such annotation, so with Velero's
-default opt-in mode only the file storage is copied.
+`backup.velero.io/backup-volumes`. The database and RabbitMQ pods carry no such annotation, so
+with Velero's default opt-in mode only the file storage is copied.

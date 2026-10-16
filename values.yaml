@@ -122,8 +122,9 @@ Rabbitmq:
   Port: 5672
   Secret: ""
   Tls: false
-  # The settings below apply to the chart's broker. Its queues are quorum queues, which survive
-  # the loss of one node with 3 replicas.
+  # The settings below apply to the chart's broker. Pending background work is stored in the
+  # database, and Prosuna publishes it again after the broker restarts, so no work is lost. With
+  # 3 replicas, the quorum queues stay available while one node is down.
   Replicas: 1
   Storage: 10Gi
 
