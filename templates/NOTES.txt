@@ -16,6 +16,12 @@ Check the pods and the realm setup of this Helm deployment:
 
 Setup runs on each Helm install or upgrade. Use --wait --wait-for-jobs --timeout 20m
 to wait for the server and setup Job to complete.
+
+Create the first Prosuna admin (Keycloak admins are not Prosuna admins):
+  1. Sign in to the Keycloak admin console as {{ .Values.Keycloak.AdminUsername }}.
+  2. In the realm "staff", create a user with an e-mail address from Prosuna.BootstrapAdminMail
+     ({{ .Values.Prosuna.BootstrapAdminMail }}) and set a password on its Credentials tab.
+  3. Sign in to the staff app with that user. While Prosuna has no admin, it becomes one.
 {{- if and (not .Values.Postgres.Backup.ObjectStore) (not (and .Values.Postgres.Prosuna.Host .Values.Postgres.Keycloak.Host)) }}
 
 WARNING: Postgres.Backup.ObjectStore is empty, so the chart's databases are not backed up.

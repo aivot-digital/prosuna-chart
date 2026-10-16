@@ -36,7 +36,8 @@ Secrets:
   # Permanent Keycloak admin Keycloak.AdminUsername, created by the setup Job. Keycloak's password
   # policy: at least 12 characters with an uppercase letter, a lowercase letter, a digit and a
   # special character; it must not contain the username, equal the e-mail address or appear in
-  # Keycloak's 100k_passwords.txt blacklist.
+  # Keycloak's 100k_passwords.txt blacklist. The setup Job sets it only when it creates the admin;
+  # change it in Keycloak afterwards.
   KeycloakAdminPassword: ""
   # Client secret the setup Job authenticates with; at least 32 random characters.
   KeycloakDeploymentClientSecret: ""

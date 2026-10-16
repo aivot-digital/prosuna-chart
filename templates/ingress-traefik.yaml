@@ -3,18 +3,6 @@
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: cors-fonts
-  namespace: {{ .Release.Namespace }}
-spec:
-  headers:
-    # Caddy adds a response header without handling CORS preflight requests.
-    # Remove once the Prosuna image sends this header itself.
-    customResponseHeaders:
-      Access-Control-Allow-Origin: "*"
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
   name: redirect-security
   namespace: {{ .Release.Namespace }}
 spec:
@@ -119,18 +107,7 @@ spec:
           # for startup instead of receiving an immediate empty-service 503.
           nativeLB: true
           serversTransport: app-upstream
-    - kind: Rule
-      match: {{ printf "Host(`%s`) && PathPrefix(`/assets/fonts/`)" .Values.Hostname | quote }}
-      priority: 100
-      middlewares:
-        - name: cors-fonts
-        - name: retry-app
-      services:
-        - name: prosuna-app
-          port: 8080
-          nativeLB: true
-          serversTransport: app-upstream
-    # The web app's own redirect points to its internal http://<host>:8080, so redirect here.
+    # Like the Caddyfile, redirect here instead of relying on the web app's own redirect.
     - kind: Rule
       match: {{ printf "Host(`%s`) && Path(`/security.txt`)" .Values.Hostname | quote }}
       priority: 100

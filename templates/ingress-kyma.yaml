@@ -12,9 +12,9 @@ spec:
     - {{ .Values.Hostname | quote }}
   # Uploads of up to 500 MB need more than the default of 180 seconds on slow connections.
   timeout: 900
-  # Without a CORS policy the API Gateway removes CORS headers from responses. Web fonts must be
-  # loadable from other origins (/assets/fonts in the Caddyfile). The policy applies to the whole
-  # host, so it allows only GET and HEAD requests without credentials.
+  # Without a CORS policy the API Gateway removes CORS headers from responses, including the one
+  # the web app sends for its fonts (/assets/fonts), which must be loadable from other origins. The
+  # policy applies to the whole host, so it allows only GET and HEAD requests without credentials.
   corsPolicy:
     allowOrigins:
       - regex: ".*"
