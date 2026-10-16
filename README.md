@@ -76,6 +76,24 @@ Notes for existing services:
 `Prosuna.ExtraEnv` and `Keycloak.ExtraEnv` add environment variables and override the chart's
 settings of the same name, e.g. `PROSUNA_SMTP_TLS`.
 
+### RabbitMQ replicas
+
+The chart's broker holds no state that has to survive a restart: Prosuna stores pending background
+work in the database and publishes it again when the broker comes back empty. With one replica,
+the default, RabbitMQ therefore runs without a volume. With more replicas, each node keeps its
+data on a volume of `Rabbitmq.Storage`, because a restarted node needs it to rejoin the others.
+
+The operator can neither add or remove the volumes of a running broker nor reduce its replicas.
+To change `Rabbitmq.Replicas` from 1 to more, or to reduce it, delete the broker and its volumes
+first. The new broker gets new credentials, so restart the API afterwards:
+
+```sh
+kubectl -n <namespace> delete rabbitmqcluster rabbitmq
+kubectl -n <namespace> delete pvc -l app.kubernetes.io/name=rabbitmq
+helm upgrade <release> . --namespace <namespace> -f <the environment's values>
+kubectl -n <namespace> rollout restart deployment prosuna-api
+```
+
 ## Ingress
 
 `Ingress.Type` selects how `https://<Hostname>` reaches the workloads. All routes keep their path

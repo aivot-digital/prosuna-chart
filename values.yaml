@@ -124,8 +124,10 @@ Rabbitmq:
   Tls: false
   # The settings below apply to the chart's broker. Pending background work is stored in the
   # database, and Prosuna publishes it again after the broker restarts, so no work is lost. With
-  # 3 replicas, the quorum queues stay available while one node is down.
+  # 3 replicas, the quorum queues stay available while one node is down. Changing between 1 and
+  # more replicas, or reducing them, requires recreating the broker; see README.md.
   Replicas: 1
+  # Volume per replica, only with more than 1 replica. A single replica runs without a volume.
   Storage: 10Gi
 
 Redis:

@@ -20,8 +20,10 @@ spec:
       memory: 512Mi
     limits:
       memory: 1Gi
+  # A single node holds nothing that has to survive a restart and runs on an emptyDir (storage 0).
+  # Nodes of a cluster need their data to rejoin the others after a restart.
   persistence:
-    storage: {{ .Values.Rabbitmq.Storage }}
+    storage: {{ ternary "0" .Values.Rabbitmq.Storage (eq (int .Values.Rabbitmq.Replicas) 1) | quote }}
   rabbitmq:
     # Prosuna declares its queues without a type. Quorum queues are replicated across the
     # replicas; classic queues would live on a single node.
