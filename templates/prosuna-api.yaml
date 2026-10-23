@@ -15,7 +15,7 @@ data:
   PROSUNA_SENTRY_WEB_APP: {{ .Values.Prosuna.SentryDsnWebApp | quote }}
 
   PROSUNA_LOG_FORMAT: "ecs"
-  PROSUNA_SEEDING_LOCAL_STORAGE_PROVIDERS_ENABLED: "false"
+  PROSUNA_SEEDING_LOCAL_STORAGE_PROVIDERS_ENABLED: "true"
 
   # Services deployed by the chart use short names, which resolve in the pod's own namespace, so
   # a copy restored into another namespace never connects to the original services.
