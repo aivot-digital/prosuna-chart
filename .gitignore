@@ -1,4 +1,4 @@
 # Local credentials and personal IDE state
 .env*
-values.local*.yaml
+*.local.yaml
 .idea/
