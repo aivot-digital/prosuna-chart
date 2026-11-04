@@ -31,6 +31,7 @@ Secrets:
   CaptchaKey: ""
   # SMTP password for Prosuna and Keycloak.
   SmtpPassword: ""
+  # The next three only for the chart's Keycloak, not with Keycloak.Url.
   # Temporary Keycloak admin "admin", created by Keycloak and disabled by the setup Job.
   KeycloakBootstrapAdminPassword: ""
   # Permanent Keycloak admin Keycloak.AdminUsername, created by the setup Job. Keycloak's password
@@ -41,7 +42,8 @@ Secrets:
   KeycloakAdminPassword: ""
   # Client secret the setup Job authenticates with; at least 32 random characters.
   KeycloakDeploymentClientSecret: ""
-  # Client secret Prosuna manages Keycloak users with; at least 32 random characters.
+  # Client secret Prosuna manages Keycloak users with; at least 32 random characters. With
+  # Keycloak.Url, the secret of Keycloak.BackendClientId in the existing realm.
   KeycloakBackendClientSecret: ""
 
 Prosuna:
@@ -63,6 +65,19 @@ Prosuna:
   ExtraEnv: []
 
 Keycloak:
+  # Empty: the chart deploys Keycloak at https://<Hostname>/idp and sets up its realms. Otherwise the
+  # public URL of an existing Keycloak including its relative path, without a trailing slash, e.g.
+  # https://login.example.org/idp. Its realm and clients must exist already; Prosuna authenticates
+  # with Secrets.KeycloakBackendClientSecret. Postgres.Keycloak and the other Keycloak settings and
+  # secrets are then ignored.
+  Url: ""
+  # Staff realm Prosuna signs in with, e.g. test-staff on a shared Keycloak.
+  Realm: staff
+  # Public client of the staff app, and the confidential client Prosuna manages users with. The
+  # chart's own Keycloak always creates them as app and backend.
+  FrontendClientId: app
+  BackendClientId: backend
+  # The settings below apply to the chart's Keycloak only.
   AdminUsername: sysadmin
   AdminEmail: admin@mail.invalid
   # Additional environment variables for the Keycloak server, e.g. KC_LOG_LEVEL.
@@ -151,7 +166,8 @@ Gotenberg:
 Ingress:
   # traefik: Traefik IngressRoutes with a cert-manager certificate.
   # kyma:    Kyma APIRule on an Istio gateway.
-  # none:    route https://<Hostname> yourself: /idp to keycloak:8080, /api to prosuna-api:8080
+  # none:    route https://<Hostname> yourself: /idp to keycloak:8080 (unless Keycloak.Url is set),
+  #          /api to prosuna-api:8080
   #          and everything else to prosuna-app:8080, keeping the paths and sending X-Forwarded-*
   #          headers.
   Type: traefik

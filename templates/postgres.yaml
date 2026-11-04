@@ -6,7 +6,11 @@
 {{- if eq $backup.RecoverFrom $prefix }}
 {{- fail "Postgres.Backup.RecoverFrom must differ from Postgres.Backup.Prefix (default: the release namespace): new clusters need backup paths of their own" }}
 {{- end }}
-{{- range $name, $db := dict "prosuna" .Values.Postgres.Prosuna "keycloak" .Values.Postgres.Keycloak }}
+{{- $dbs := dict "prosuna" .Values.Postgres.Prosuna }}
+{{- if not .Values.Keycloak.Url }}
+{{- $_ := set $dbs "keycloak" .Values.Postgres.Keycloak }}
+{{- end }}
+{{- range $name, $db := $dbs }}
 {{- if not $db.Host }}
 ---
 # The operator creates the database, its owner and the Secret postgres-{{ $name }}-app with the
@@ -104,7 +108,7 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
-{{- if and $backup.ObjectStore (not (and .Values.Postgres.Prosuna.Host .Values.Postgres.Keycloak.Host)) }}
+{{- if and $backup.ObjectStore (not (and .Values.Postgres.Prosuna.Host (or .Values.Keycloak.Url .Values.Postgres.Keycloak.Host))) }}
 ---
 # Requires the Barman Cloud Plugin. Credentials referenced in the configuration must exist in the
 # release namespace.

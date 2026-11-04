@@ -21,6 +21,7 @@ spec:
     allowMethods: ["GET", "HEAD"]
   # Earlier rules take precedence, so the catch-all comes last. All paths keep their prefixes.
   rules:
+    {{- if not .Values.Keycloak.Url }}
     - path: /idp
       methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
       noAuth: true
@@ -33,6 +34,7 @@ spec:
       service:
         name: keycloak
         port: 8080
+    {{- end }}
     - path: /api
       methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
       noAuth: true

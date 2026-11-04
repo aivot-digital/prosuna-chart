@@ -1,14 +1,19 @@
-# Every backing service already exists. Each Secret holds the keys "username" and "password"
-# (Redis: "password", optionally "username"); see README.md.
+# Every backing service, including Keycloak, already exists. Each Secret holds the keys "username"
+# and "password" (Redis: "password", optionally "username"); see README.md.
 Hostname: prosuna.example.org
+
+# The realm and both clients exist already; Secrets.KeycloakBackendClientSecret is the backend
+# client's secret.
+Keycloak:
+  Url: https://login.example.org/idp
+  Realm: test-staff
+  FrontendClientId: test-app
+  BackendClientId: test-backend
 
 Postgres:
   Prosuna:
     Host: postgres.example.internal
     Secret: prosuna-db
-  Keycloak:
-    Host: postgres.example.internal
-    Secret: keycloak-db
 
 Rabbitmq:
   Host: rabbitmq.example.internal

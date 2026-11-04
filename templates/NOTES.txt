@@ -1,28 +1,41 @@
+{{- $keycloak := .Values.Keycloak.Url | default (printf "https://%s/idp" .Values.Hostname) -}}
 Prosuna staff app:      https://{{ .Values.Hostname }}/staff
-Keycloak admin console: https://{{ .Values.Hostname }}/idp/admin/
+Keycloak admin console: {{ $keycloak }}/admin/
 Environment namespace:  {{ .Release.Namespace }}
 
 Backing services:
+  Keycloak:              {{ .Values.Keycloak.Url | default "Deployment keycloak" }}, realm {{ .Values.Keycloak.Realm }}
   PostgreSQL (Prosuna):  {{ .Values.Postgres.Prosuna.Host | default "CloudNativePG cluster postgres-prosuna" }}
+{{- if not .Values.Keycloak.Url }}
   PostgreSQL (Keycloak): {{ .Values.Postgres.Keycloak.Host | default "CloudNativePG cluster postgres-keycloak" }}
+{{- end }}
   RabbitMQ:              {{ .Values.Rabbitmq.Host | default "RabbitmqCluster rabbitmq" }}
   Redis:                 {{ .Values.Redis.Host | default "Deployment redis" }}
   ClamAV:                {{ .Values.Clamav.Host | default "Deployment clamav" }}
   Gotenberg:             {{ .Values.Gotenberg.Host | default "Deployment gotenberg" }}
 
-Check the pods and the realm setup of this Helm deployment:
+Check the pods of this Helm deployment:
   kubectl get pods --namespace {{ .Release.Namespace }}
+{{- if not .Values.Keycloak.Url }}
   kubectl logs job/keycloak-setup-{{ .Release.Revision }} --namespace {{ .Release.Namespace }} --container setup
 
 Setup runs on each Helm install or upgrade. Use --wait --wait-for-jobs --timeout 20m
 to wait for the server and setup Job to complete.
+{{- end }}
 
 Create the first Prosuna admin (Keycloak admins are not Prosuna admins):
+{{- if .Values.Keycloak.Url }}
+  1. In the realm "{{ .Values.Keycloak.Realm }}" of {{ .Values.Keycloak.Url }}, create a user with an
+     e-mail address from Prosuna.BootstrapAdminMail ({{ .Values.Prosuna.BootstrapAdminMail }}).
+  2. Sign in to the staff app with that user. While Prosuna has no admin, it becomes one.
+{{- else }}
   1. Sign in to the Keycloak admin console as {{ .Values.Keycloak.AdminUsername }}.
-  2. In the realm "staff", create a user with an e-mail address from Prosuna.BootstrapAdminMail
-     ({{ .Values.Prosuna.BootstrapAdminMail }}) and set a password on its Credentials tab.
+  2. In the realm "{{ .Values.Keycloak.Realm }}", create a user with an e-mail address from
+     Prosuna.BootstrapAdminMail ({{ .Values.Prosuna.BootstrapAdminMail }}) and set a password on
+     its Credentials tab.
   3. Sign in to the staff app with that user. While Prosuna has no admin, it becomes one.
-{{- if and (not .Values.Postgres.Backup.ObjectStore) (not (and .Values.Postgres.Prosuna.Host .Values.Postgres.Keycloak.Host)) }}
+{{- end }}
+{{- if and (not .Values.Postgres.Backup.ObjectStore) (not (and .Values.Postgres.Prosuna.Host (or .Values.Keycloak.Url .Values.Postgres.Keycloak.Host))) }}
 
 WARNING: Postgres.Backup.ObjectStore is empty, so the chart's databases are not backed up.
 {{- end }}

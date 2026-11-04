@@ -21,6 +21,24 @@
     "NetworkPolicy",
     "Monitoring"
   ],
+  "if": {
+    "properties": {
+      "Secrets": { "properties": { "ExistingSecret": { "const": "" } } },
+      "Keycloak": { "properties": { "Url": { "const": "" } } }
+    }
+  },
+  "then": {
+    "description": "Secrets of the chart's Keycloak, checked only when the chart creates the Secret and deploys Keycloak. The character rules of KeycloakAdminPassword are checked in templates/secret.yaml, because schema pattern errors print the rejected value.",
+    "properties": {
+      "Secrets": {
+        "properties": {
+          "KeycloakBootstrapAdminPassword": { "$ref": "#/definitions/password" },
+          "KeycloakAdminPassword": { "$ref": "#/definitions/password" },
+          "KeycloakDeploymentClientSecret": { "$ref": "#/definitions/key" }
+        }
+      }
+    }
+  },
   "properties": {
     "Hostname": {
       "description": "Fully qualified hostname without a scheme or path.",
@@ -79,13 +97,10 @@
         "properties": { "ExistingSecret": { "const": "" } }
       },
       "then": {
-        "description": "Checked only when the chart creates the Secret. The character rules of KeycloakAdminPassword are checked in templates/secret.yaml, because schema pattern errors print the rejected value.",
+        "description": "Checked only when the chart creates the Secret. The Keycloak admin secrets are checked at the root, because they depend on Keycloak.Url.",
         "properties": {
           "SecretsKey": { "$ref": "#/definitions/key" },
           "CaptchaKey": { "$ref": "#/definitions/key" },
-          "KeycloakBootstrapAdminPassword": { "$ref": "#/definitions/password" },
-          "KeycloakAdminPassword": { "$ref": "#/definitions/password" },
-          "KeycloakDeploymentClientSecret": { "$ref": "#/definitions/key" },
           "KeycloakBackendClientSecret": { "$ref": "#/definitions/key" }
         }
       }
@@ -107,8 +122,16 @@
     "Keycloak": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["AdminUsername", "AdminEmail", "ExtraEnv"],
+      "required": ["Url", "Realm", "FrontendClientId", "BackendClientId", "AdminUsername", "AdminEmail", "ExtraEnv"],
       "properties": {
+        "Url": {
+          "description": "Public URL of an existing Keycloak including its relative path, without a trailing slash; empty deploys Keycloak.",
+          "type": "string",
+          "pattern": "^(https://[^/?#]+(/[^?#]*[^/?#])?)?$"
+        },
+        "Realm": { "type": "string", "minLength": 1 },
+        "FrontendClientId": { "type": "string", "minLength": 1 },
+        "BackendClientId": { "type": "string", "minLength": 1 },
         "AdminUsername": { "type": "string", "minLength": 1 },
         "AdminEmail": { "type": "string", "minLength": 1 },
         "ExtraEnv": { "$ref": "#/definitions/env" }
