@@ -57,6 +57,7 @@ spec:
         {{- toYaml $ingressFrom | nindent 8 }}
       ports:
         - port: 8080
+{{- if not .Values.Keycloak.Url }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -81,6 +82,7 @@ spec:
               app: keycloak-setup
       ports:
         - port: 8080
+{{- end }}
 {{- if not .Values.Clamav.Host }}
 ---
 apiVersion: networking.k8s.io/v1

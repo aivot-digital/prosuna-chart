@@ -89,12 +89,14 @@ spec:
   routes:
     # Explicit path boundaries are independent of the Ingress provider's
     # strictPrefixMatching setting. All upstream paths retain their prefixes.
+    {{- if not .Values.Keycloak.Url }}
     - kind: Rule
       match: {{ printf "Host(`%s`) && (Path(`/idp`) || PathPrefix(`/idp/`))" .Values.Hostname | quote }}
       priority: 100
       services:
         - name: keycloak
           port: 8080
+    {{- end }}
     - kind: Rule
       match: {{ printf "Host(`%s`) && (Path(`/api`) || PathPrefix(`/api/`))" .Values.Hostname | quote }}
       priority: 100

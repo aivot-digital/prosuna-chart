@@ -49,11 +49,16 @@ data:
   PROSUNA_SMTP_USERNAME: {{ .Values.Smtp.Username | quote }}
   PROSUNA_FROM_MAIL: {{ .Values.Smtp.From | quote }}
 
+{{- if .Values.Keycloak.Url }}
+  # Without an internal URL, Prosuna reaches Keycloak at its public URL.
+  PROSUNA_KEYCLOAK_OIDC_HOSTNAME: {{ .Values.Keycloak.Url | quote }}
+{{- else }}
   PROSUNA_KEYCLOAK_OIDC_HOSTNAME: "https://{{ .Values.Hostname }}/idp"
   PROSUNA_KEYCLOAK_OIDC_INTERNAL_HOSTNAME: "http://keycloak:8080/idp"
-  PROSUNA_KEYCLOAK_OIDC_REALM: "staff"
-  PROSUNA_KEYCLOAK_OIDC_FRONTEND_CLIENT_ID: "app"
-  PROSUNA_KEYCLOAK_OIDC_BACKEND_CLIENT_ID: "backend"
+{{- end }}
+  PROSUNA_KEYCLOAK_OIDC_REALM: {{ .Values.Keycloak.Realm | quote }}
+  PROSUNA_KEYCLOAK_OIDC_FRONTEND_CLIENT_ID: {{ .Values.Keycloak.FrontendClientId | quote }}
+  PROSUNA_KEYCLOAK_OIDC_BACKEND_CLIENT_ID: {{ .Values.Keycloak.BackendClientId | quote }}
 
   PROSUNA_SUPPORT_URL: {{ .Values.Prosuna.SupportUrl | quote }}
   PROSUNA_REPORT_MAIL: {{ .Values.Prosuna.ReportMail | quote }}

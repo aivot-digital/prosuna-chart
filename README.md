@@ -1,6 +1,6 @@
 # Prosuna Helm chart
 
-The chart deploys Prosuna (API and web app) and Keycloak. PostgreSQL, RabbitMQ, Redis, ClamAV and
+The chart deploys Prosuna (API and web app). Keycloak, PostgreSQL, RabbitMQ, Redis, ClamAV and
 Gotenberg are each deployed by the chart or supplied as existing services. It is the Kubernetes
 port of `examples/server/compose.yml` and `Caddyfile` in the Prosuna repository.
 
@@ -25,7 +25,9 @@ Secrets:
   KeycloakBackendClientSecret: <openssl rand -hex 32>
 ```
 
-Alternatively, create the Secret yourself with these keys and set `Secrets.ExistingSecret`.
+With an existing Keycloak, leave out the three Keycloak secrets above `KeycloakBackendClientSecret`;
+see [Existing Keycloak](#existing-keycloak). Alternatively, create the Secret yourself with these
+keys and set `Secrets.ExistingSecret`.
 
 ```sh
 helm upgrade --install testing . --namespace testing --create-namespace \
@@ -39,7 +41,7 @@ helm upgrade --install testing . --namespace testing --create-namespace \
 |--------------------------|------------------------------------------------------------------------------------------------------------|
 | `operator-cluster.yaml`  | Traefik, cert-manager, CloudNativePG and RabbitMQ operators, Prometheus Operator (the k3d testing cluster) |
 | `kyma.yaml`              | SAP BTP Kyma runtime with the CloudNativePG and RabbitMQ operators installed                               |
-| `external-services.yaml` | Every backing service exists already; another ingress controller                                           |
+| `external-services.yaml` | Keycloak and every backing service exist already; another ingress controller                               |
 
 ## Backing services
 
@@ -73,6 +75,24 @@ Notes for existing services:
 - **Gotenberg:** Prosuna renders user-controlled HTML. An existing Gotenberg must restrict Chromium
   like `templates/gotenberg.yaml` does (`CHROMIUM_DENY_PRIVATE_IPS`, `CHROMIUM_ALLOW_LIST`).
 
+### Existing Keycloak
+
+Leave `Keycloak.Url` empty and the chart deploys Keycloak at `https://<Hostname>/idp`, with a
+setup Job that creates its realms and clients on every install or upgrade. Set `Keycloak.Url` to
+the public URL of an existing Keycloak, including its relative path, e.g.
+`https://login.example.org/idp`. The chart then deploys neither Keycloak, its database nor the
+setup Job, and does not route `/idp`. The existing Keycloak must already provide:
+
+- the staff realm `Keycloak.Realm`, e.g. `test-staff`,
+- its public client `Keycloak.FrontendClientId` and its confidential client
+  `Keycloak.BackendClientId` with a service account, set up like the clients `app` and `backend`
+  of the `keycloak-egov-plugins-setup` staff realm, with redirect URIs under `https://<Hostname>`,
+- the backend client's secret, as `Secrets.KeycloakBackendClientSecret`.
+
+`Postgres.Keycloak`, `Images.Keycloak`, `Images.KeycloakSetup`, the other `Keycloak` settings and
+the secrets `KeycloakBootstrapAdminPassword`, `KeycloakAdminPassword` and
+`KeycloakDeploymentClientSecret` are ignored. The API reaches Keycloak at its public URL.
+
 `Prosuna.ExtraEnv` and `Keycloak.ExtraEnv` add environment variables and override the chart's
 settings of the same name, e.g. `PROSUNA_SMTP_TLS`.
 
@@ -97,7 +117,7 @@ kubectl -n <namespace> rollout restart deployment prosuna-api
 ## Ingress
 
 `Ingress.Type` selects how `https://<Hostname>` reaches the workloads. All routes keep their path
-prefixes: `/idp` goes to Keycloak, `/api` to the API and everything else to the web app.
+prefixes: `/idp` goes to the chart's Keycloak, `/api` to the API and everything else to the web app.
 
 - **`traefik`**: IngressRoutes that mirror the Caddyfile, including retries while the API starts
   and the `/security.txt` redirect. A standard Ingress lets cert-manager issue the certificate
@@ -231,7 +251,7 @@ again after the broker restarts, even when the broker comes back empty.
 
 ### Databases
 
-With `Postgres.Backup.ObjectStore` set, both database clusters archive their WAL continuously
+With `Postgres.Backup.ObjectStore` set, the chart's database clusters archive their WAL continuously
 and take a base backup on `Postgres.Backup.Schedule` (daily at 02:00 UTC by default) and right
 after creation. Backups are kept for `Postgres.Backup.Retention`. Each cluster writes to
 `<destinationPath>/<prefix>-<database>`, where the prefix is `Postgres.Backup.Prefix` or by
@@ -277,7 +297,8 @@ EOF
 done
 ```
 
-Do this after enabling backups for existing database clusters. CloudNativePG then restarts the
+With an existing Keycloak, there is no `postgres-keycloak`; back up `prosuna` only. Do this after
+enabling backups for existing database clusters. CloudNativePG then restarts the
 database pods to add the backup sidecar, and the first backup, taken right away, can fail during
 that restart. Recovery needs at least one completed base backup.
 
