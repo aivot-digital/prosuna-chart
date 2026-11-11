@@ -29,6 +29,24 @@ With an existing Keycloak, leave out the three Keycloak secrets above `KeycloakB
 see [Existing Keycloak](#existing-keycloak). Alternatively, create the Secret yourself with these
 keys and set `Secrets.ExistingSecret`.
 
+To take single keys from Secrets created by a secret provider, such as External Secrets or Sealed
+Secrets, reference them with `Secrets.Refs`. Each entry names a Secret in
+the release namespace and its key; the provider's key names do not have to match the chart's. The
+chart then creates the Secret `prosuna` only for the keys left over, from the values in `Secrets`:
+
+```yaml
+Secrets:
+  Refs:
+    SecretsKey: { Secret: prosuna-env, Key: secrets-key }
+    CaptchaKey: { Secret: prosuna-env, Key: captcha-key }
+    KeycloakBackendClientSecret: { Secret: prosuna-env, Key: backend-client-secret }
+    SmtpPassword: { Secret: smtp, Key: password }
+  # Optional: restart prosuna-api and keycloak when the provider changes a Secret, with the
+  # annotation of your provider or of a controller like Stakater Reloader.
+  DeploymentAnnotations:
+    reloader.stakater.com/auto: "true"
+```
+
 ```sh
 helm upgrade --install testing . --namespace testing --create-namespace \
   -f examples/operator-cluster.yaml -f values.local.yaml \

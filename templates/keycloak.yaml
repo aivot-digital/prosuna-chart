@@ -28,7 +28,6 @@ data:
 {{- if or (ne .Values.Keycloak.FrontendClientId "app") (ne .Values.Keycloak.BackendClientId "backend") }}
 {{- fail "Keycloak.FrontendClientId and Keycloak.BackendClientId must be app and backend unless Keycloak.Url is set" }}
 {{- end }}
-{{- $secret := .Values.Secrets.ExistingSecret | default "prosuna" }}
 {{- /* Credentials of the chart's database come from the Secret CloudNativePG creates. */}}
 {{- $dbSecret := "postgres-keycloak-app" }}
 {{- if .Values.Postgres.Keycloak.Host }}
@@ -41,6 +40,10 @@ kind: Deployment
 metadata:
   name: keycloak
   namespace: {{ .Release.Namespace }}
+  {{- with .Values.Secrets.DeploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: 1
   selector:
@@ -112,8 +115,7 @@ spec:
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: KeycloakBootstrapAdminPassword
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "KeycloakBootstrapAdminPassword") | nindent 18 }}
             {{- with .Values.Keycloak.ExtraEnv }}
             # Explicit env entries take precedence over the ConfigMap below.
             {{- toYaml . | nindent 12 }}
@@ -207,28 +209,23 @@ spec:
             - name: KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: KeycloakBootstrapAdminPassword
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "KeycloakBootstrapAdminPassword") | nindent 18 }}
             - name: KEYCLOAK_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: KeycloakAdminPassword
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "KeycloakAdminPassword") | nindent 18 }}
             - name: KEYCLOAK_DEPLOYMENT_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: KeycloakDeploymentClientSecret
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "KeycloakDeploymentClientSecret") | nindent 18 }}
             - name: BACKEND_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: KeycloakBackendClientSecret
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "KeycloakBackendClientSecret") | nindent 18 }}
             - name: SMTP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: SmtpPassword
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "SmtpPassword") | nindent 18 }}
           envFrom:
             - configMapRef:
                 name: keycloak-setup
