@@ -64,7 +64,6 @@ data:
   PROSUNA_REPORT_MAIL: {{ .Values.Prosuna.ReportMail | quote }}
   PROSUNA_BOOTSTRAP_ADMIN_MAIL: {{ .Values.Prosuna.BootstrapAdminMail | quote }}
 {{- end }}
-{{- $secret := .Values.Secrets.ExistingSecret | default "prosuna" }}
 {{- /* Credentials of the chart's services come from the Secrets their operators create. */}}
 {{- $dbSecret := "postgres-prosuna-app" }}
 {{- if .Values.Postgres.Prosuna.Host }}
@@ -100,6 +99,10 @@ kind: Deployment
 metadata:
   name: prosuna-api
   namespace: {{ .Release.Namespace }}
+  {{- with .Values.Secrets.DeploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: 1
   # The data volume attaches to one node at a time, so stop the old pod before starting the new one.
@@ -203,23 +206,19 @@ spec:
             - name: PROSUNA_SECRETS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: SecretsKey
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "SecretsKey") | nindent 18 }}
             - name: PROSUNA_CAPTCHA_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: CaptchaKey
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "CaptchaKey") | nindent 18 }}
             - name: PROSUNA_SMTP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: SmtpPassword
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "SmtpPassword") | nindent 18 }}
             - name: PROSUNA_KEYCLOAK_OIDC_BACKEND_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ $secret }}
-                  key: KeycloakBackendClientSecret
+                  {{- include "prosuna.secretKeyRef" (dict "root" $ "key" "KeycloakBackendClientSecret") | nindent 18 }}
             {{- with .Values.Prosuna.ExtraEnv }}
             # Explicit env entries take precedence over the ConfigMap below.
             {{- toYaml . | nindent 12 }}

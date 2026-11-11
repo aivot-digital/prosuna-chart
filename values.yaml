@@ -24,6 +24,13 @@ ImagePullSecrets: []
 # name. It must contain the keys below; the values here are then ignored.
 Secrets:
   ExistingSecret: ""
+  # Read single keys from any Secret in the release namespace instead, under a key name of its
+  # own, e.g. SmtpPassword: {Secret: smtp, Key: password}. Takes precedence over ExistingSecret;
+  # the value below is then ignored. The chart creates "prosuna" only for keys left over.
+  Refs: {}
+  # Annotations of the Deployments that read these Secrets (prosuna-api, keycloak), e.g. for a
+  # controller that restarts them when a Secret changes.
+  DeploymentAnnotations: {}
   # Encrypts sensitive data in Prosuna; at least 32 characters. Never change it once set: data
   # encrypted with the old key becomes unreadable.
   SecretsKey: ""
