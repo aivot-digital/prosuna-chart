@@ -13,7 +13,7 @@ Images:
   Rabbitmq: docker.io/library/rabbitmq:4.4.0-management
   Redis: docker.io/library/redis:8.10.3-alpine3.23
   Clamav: docker.io/clamav/clamav:1.5.4-debian
-  Gotenberg: docker.io/gotenberg/gotenberg:9.3.0
+  Gotenberg: docker.io/gotenberg/gotenberg:9.4.0
 
 # Pull secrets for every pod, e.g. [{name: regcred}]. Docker Hub limits anonymous pulls per IP
 # address, which shared cloud egress addresses reach quickly.
