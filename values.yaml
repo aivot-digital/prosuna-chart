@@ -193,7 +193,7 @@ NetworkPolicy:
   # for none.
   IngressFrom: []
 
-# PodMonitors for the databases and a ServiceMonitor for the broker. Requires the Prometheus
+# PodMonitors for the API and the databases and a ServiceMonitor for the broker. Requires the Prometheus
 # Operator CRDs, for example from kube-prometheus-stack; Kyma has none.
 Monitoring:
   Enabled: false
