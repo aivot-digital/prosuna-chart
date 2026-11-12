@@ -17,6 +17,8 @@ data:
   PROSUNA_SENTRY_WEB_APP: {{ .Values.Prosuna.SentryDsnWebApp | quote }}
 
   PROSUNA_LOG_FORMAT: "ecs"
+  # Root log level; override with Prosuna.ExtraEnv, e.g. INFO when debugging.
+  PROSUNA_LOG_LEVEL: "WARN"
   PROSUNA_SEEDING_LOCAL_STORAGE_PROVIDERS_ENABLED: "false"
 
   # Services deployed by the chart use short names, which resolve in the pod's own namespace, so
