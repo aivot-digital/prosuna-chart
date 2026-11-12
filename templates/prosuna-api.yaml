@@ -8,6 +8,8 @@ metadata:
 data:
   PROSUNA_HOSTNAME: "https://{{ .Values.Hostname }}"
   PROSUNA_SERVER_PORT: "8080"
+  # Actuator health and metrics, unauthenticated and therefore not exposed by the Service.
+  PROSUNA_MANAGEMENT_SERVER_PORT: "9090"
   PROSUNA_TIMEZONE: "Europe/Berlin"
 
   PROSUNA_ENVIRONMENT: {{ .Values.Hostname | quote }}
@@ -140,6 +142,8 @@ spec:
           ports:
             - name: prosuna-api
               containerPort: 8080
+            - name: management
+              containerPort: 9090
           resources:
             requests:
               cpu: 250m
@@ -149,20 +153,20 @@ spec:
           startupProbe:
             httpGet:
               path: /api/actuator/health
-              port: prosuna-api
+              port: management
             failureThreshold: 60
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /api/actuator/health/readiness
-              port: prosuna-api
+              port: management
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /api/actuator/health/liveness
-              port: prosuna-api
+              port: management
             periodSeconds: 10
             timeoutSeconds: 5
           env:
@@ -248,3 +252,22 @@ spec:
       port: 8080
       targetPort: prosuna-api
       protocol: TCP
+{{- if .Values.Monitoring.Enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: prosuna-api
+  namespace: {{ .Release.Namespace }}
+  {{- with .Values.Monitoring.Labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: prosuna-api
+  podMetricsEndpoints:
+    - port: management
+      path: /api/actuator/prometheus
+{{- end }}

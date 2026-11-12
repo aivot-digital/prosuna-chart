@@ -224,7 +224,9 @@ mirrored `Images`.
 
 ### Monitoring (optional)
 
-`Monitoring.Enabled` creates PodMonitors for the databases and a ServiceMonitor for the broker.
+`Monitoring.Enabled` creates PodMonitors for the API and the databases and a ServiceMonitor for the
+broker. The API's PodMonitor scrapes `/api/actuator/prometheus` on the management port 9090, which
+the NetworkPolicy opens only to pods labeled `app.kubernetes.io/name: prometheus`.
 This requires the Prometheus Operator CRDs, for example from kube-prometheus-stack. Their labels
 come from `Monitoring.Labels` and must match the selectors of the Prometheus instance.
 
