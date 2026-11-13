@@ -1,6 +1,6 @@
 # Prosuna Helm chart
 
-The chart deploys Prosuna (API and web app) and Keycloak. PostgreSQL, RabbitMQ, Redis, ClamAV and
+The chart deploys Prosuna (API and web app). Keycloak, PostgreSQL, RabbitMQ, Redis, ClamAV and
 Gotenberg are each deployed by the chart or supplied as existing services. It is the Kubernetes
 port of `examples/server/compose.yml` and `Caddyfile` in the Prosuna repository.
 
@@ -25,7 +25,27 @@ Secrets:
   KeycloakBackendClientSecret: <openssl rand -hex 32>
 ```
 
-Alternatively, create the Secret yourself with these keys and set `Secrets.ExistingSecret`.
+With an existing Keycloak, leave out the three Keycloak secrets above `KeycloakBackendClientSecret`;
+see [Existing Keycloak](#existing-keycloak). Alternatively, create the Secret yourself with these
+keys and set `Secrets.ExistingSecret`.
+
+To take single keys from Secrets created by a secret provider, such as External Secrets or Sealed
+Secrets, reference them with `Secrets.Refs`. Each entry names a Secret in
+the release namespace and its key; the provider's key names do not have to match the chart's. The
+chart then creates the Secret `prosuna` only for the keys left over, from the values in `Secrets`:
+
+```yaml
+Secrets:
+  Refs:
+    SecretsKey: { Secret: prosuna-env, Key: secrets-key }
+    CaptchaKey: { Secret: prosuna-env, Key: captcha-key }
+    KeycloakBackendClientSecret: { Secret: prosuna-env, Key: backend-client-secret }
+    SmtpPassword: { Secret: smtp, Key: password }
+  # Optional: restart prosuna-api and keycloak when the provider changes a Secret, with the
+  # annotation of your provider or of a controller like Stakater Reloader.
+  DeploymentAnnotations:
+    reloader.stakater.com/auto: "true"
+```
 
 ```sh
 helm upgrade --install testing . --namespace testing --create-namespace \
@@ -39,7 +59,25 @@ helm upgrade --install testing . --namespace testing --create-namespace \
 |--------------------------|------------------------------------------------------------------------------------------------------------|
 | `operator-cluster.yaml`  | Traefik, cert-manager, CloudNativePG and RabbitMQ operators, Prometheus Operator (the k3d testing cluster) |
 | `kyma.yaml`              | SAP BTP Kyma runtime with the CloudNativePG and RabbitMQ operators installed                               |
-| `external-services.yaml` | Every backing service exists already; another ingress controller                                           |
+| `external-services.yaml` | Keycloak and every backing service exist already; another ingress controller                               |
+
+## Upgrading
+
+### To Keycloak 26.8.2
+
+Since 26.8.2, Keycloak's Admin REST API only accepts tokens with the client scope `kc-admin-api`.
+The setup Job of a release installed with an older Keycloak authenticates with a deployment client
+that lacks this scope, so it fails with `401 Unauthorized`. Keycloak provides the scope only from
+26.8.2 on, so add it once by hand as soon as Keycloak runs 26.8.2, and run `helm upgrade` again if
+the setup Job has failed by then:
+
+1. Log in to the admin console of the `master` realm as `Keycloak.AdminUsername`.
+2. Open Clients → `deployment` → Client scopes → Add client scope.
+3. Select `kc-admin-api` and add it as `Default`.
+
+The setup Job then adds the scope to the staff realm's `backend` client itself. See
+[Upgrading To Keycloak 26.8.2](https://github.com/aivot-digital/keycloak-egov-plugins-setup#upgrading-to-keycloak-2682)
+in the setup README. This applies only to the chart's own Keycloak, not with `Keycloak.Url`.
 
 ## Backing services
 
@@ -73,6 +111,24 @@ Notes for existing services:
 - **Gotenberg:** Prosuna renders user-controlled HTML. An existing Gotenberg must restrict Chromium
   like `templates/gotenberg.yaml` does (`CHROMIUM_DENY_PRIVATE_IPS`, `CHROMIUM_ALLOW_LIST`).
 
+### Existing Keycloak
+
+Leave `Keycloak.Url` empty and the chart deploys Keycloak at `https://<Hostname>/idp`, with a
+setup Job that creates its realms and clients on every install or upgrade. Set `Keycloak.Url` to
+the public URL of an existing Keycloak, including its relative path, e.g.
+`https://login.example.org/idp`. The chart then deploys neither Keycloak, its database nor the
+setup Job, and does not route `/idp`. The existing Keycloak must already provide:
+
+- the staff realm `Keycloak.Realm`, e.g. `test-staff`,
+- its public client `Keycloak.FrontendClientId` and its confidential client
+  `Keycloak.BackendClientId` with a service account, set up like the clients `app` and `backend`
+  of the `keycloak-egov-plugins-setup` staff realm, with redirect URIs under `https://<Hostname>`,
+- the backend client's secret, as `Secrets.KeycloakBackendClientSecret`.
+
+`Postgres.Keycloak`, `Images.Keycloak`, `Images.KeycloakSetup`, the other `Keycloak` settings and
+the secrets `KeycloakBootstrapAdminPassword`, `KeycloakAdminPassword` and
+`KeycloakDeploymentClientSecret` are ignored. The API reaches Keycloak at its public URL.
+
 `Prosuna.ExtraEnv` and `Keycloak.ExtraEnv` add environment variables and override the chart's
 settings of the same name, e.g. `PROSUNA_SMTP_TLS`.
 
@@ -97,7 +153,7 @@ kubectl -n <namespace> rollout restart deployment prosuna-api
 ## Ingress
 
 `Ingress.Type` selects how `https://<Hostname>` reaches the workloads. All routes keep their path
-prefixes: `/idp` goes to Keycloak, `/api` to the API and everything else to the web app.
+prefixes: `/idp` goes to the chart's Keycloak, `/api` to the API and everything else to the web app.
 
 - **`traefik`**: IngressRoutes that mirror the Caddyfile, including retries while the API starts
   and the `/security.txt` redirect. A standard Ingress lets cert-manager issue the certificate
@@ -186,7 +242,9 @@ mirrored `Images`.
 
 ### Monitoring (optional)
 
-`Monitoring.Enabled` creates PodMonitors for the databases and a ServiceMonitor for the broker.
+`Monitoring.Enabled` creates PodMonitors for the API and the databases and a ServiceMonitor for the
+broker. The API's PodMonitor scrapes `/api/actuator/prometheus` on the management port 9090, which
+the NetworkPolicy opens only to pods labeled `app.kubernetes.io/name: prometheus`.
 This requires the Prometheus Operator CRDs, for example from kube-prometheus-stack. Their labels
 come from `Monitoring.Labels` and must match the selectors of the Prometheus instance.
 
@@ -231,7 +289,7 @@ again after the broker restarts, even when the broker comes back empty.
 
 ### Databases
 
-With `Postgres.Backup.ObjectStore` set, both database clusters archive their WAL continuously
+With `Postgres.Backup.ObjectStore` set, the chart's database clusters archive their WAL continuously
 and take a base backup on `Postgres.Backup.Schedule` (daily at 02:00 UTC by default) and right
 after creation. Backups are kept for `Postgres.Backup.Retention`. Each cluster writes to
 `<destinationPath>/<prefix>-<database>`, where the prefix is `Postgres.Backup.Prefix` or by
@@ -277,7 +335,8 @@ EOF
 done
 ```
 
-Do this after enabling backups for existing database clusters. CloudNativePG then restarts the
+With an existing Keycloak, there is no `postgres-keycloak`; back up `prosuna` only. Do this after
+enabling backups for existing database clusters. CloudNativePG then restarts the
 database pods to add the backup sidecar, and the first backup, taken right away, can fail during
 that restart. Recovery needs at least one completed base backup.
 

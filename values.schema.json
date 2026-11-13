@@ -21,6 +21,24 @@
     "NetworkPolicy",
     "Monitoring"
   ],
+  "if": {
+    "properties": {
+      "Secrets": { "properties": { "ExistingSecret": { "const": "" } } },
+      "Keycloak": { "properties": { "Url": { "const": "" } } }
+    }
+  },
+  "then": {
+    "description": "Secrets of the chart's Keycloak, checked only when the chart deploys Keycloak and stores them in its Secret, not in Secrets.Refs. The character rules of KeycloakAdminPassword are checked in templates/secret.yaml, because schema pattern errors print the rejected value.",
+    "properties": {
+      "Secrets": {
+        "allOf": [
+          { "if": { "required": ["Refs"], "properties": { "Refs": { "required": ["KeycloakBootstrapAdminPassword"] } } }, "else": { "properties": { "KeycloakBootstrapAdminPassword": { "$ref": "#/definitions/password" } } } },
+          { "if": { "required": ["Refs"], "properties": { "Refs": { "required": ["KeycloakAdminPassword"] } } }, "else": { "properties": { "KeycloakAdminPassword": { "$ref": "#/definitions/password" } } } },
+          { "if": { "required": ["Refs"], "properties": { "Refs": { "required": ["KeycloakDeploymentClientSecret"] } } }, "else": { "properties": { "KeycloakDeploymentClientSecret": { "$ref": "#/definitions/key" } } } }
+        ]
+      }
+    }
+  },
   "properties": {
     "Hostname": {
       "description": "Fully qualified hostname without a scheme or path.",
@@ -67,6 +85,23 @@
       "additionalProperties": false,
       "properties": {
         "ExistingSecret": { "type": "string" },
+        "Refs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "SecretsKey": { "$ref": "#/definitions/secretRef" },
+            "CaptchaKey": { "$ref": "#/definitions/secretRef" },
+            "SmtpPassword": { "$ref": "#/definitions/secretRef" },
+            "KeycloakBootstrapAdminPassword": { "$ref": "#/definitions/secretRef" },
+            "KeycloakAdminPassword": { "$ref": "#/definitions/secretRef" },
+            "KeycloakDeploymentClientSecret": { "$ref": "#/definitions/secretRef" },
+            "KeycloakBackendClientSecret": { "$ref": "#/definitions/secretRef" }
+          }
+        },
+        "DeploymentAnnotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "SecretsKey": { "type": "string" },
         "CaptchaKey": { "type": "string" },
         "SmtpPassword": { "type": "string" },
@@ -79,15 +114,12 @@
         "properties": { "ExistingSecret": { "const": "" } }
       },
       "then": {
-        "description": "Checked only when the chart creates the Secret. The character rules of KeycloakAdminPassword are checked in templates/secret.yaml, because schema pattern errors print the rejected value.",
-        "properties": {
-          "SecretsKey": { "$ref": "#/definitions/key" },
-          "CaptchaKey": { "$ref": "#/definitions/key" },
-          "KeycloakBootstrapAdminPassword": { "$ref": "#/definitions/password" },
-          "KeycloakAdminPassword": { "$ref": "#/definitions/password" },
-          "KeycloakDeploymentClientSecret": { "$ref": "#/definitions/key" },
-          "KeycloakBackendClientSecret": { "$ref": "#/definitions/key" }
-        }
+        "description": "Checked only for keys the chart stores in its Secret, not in Refs. The Keycloak admin secrets are checked at the root, because they depend on Keycloak.Url.",
+        "allOf": [
+          { "if": { "required": ["Refs"], "properties": { "Refs": { "required": ["SecretsKey"] } } }, "else": { "properties": { "SecretsKey": { "$ref": "#/definitions/key" } } } },
+          { "if": { "required": ["Refs"], "properties": { "Refs": { "required": ["CaptchaKey"] } } }, "else": { "properties": { "CaptchaKey": { "$ref": "#/definitions/key" } } } },
+          { "if": { "required": ["Refs"], "properties": { "Refs": { "required": ["KeycloakBackendClientSecret"] } } }, "else": { "properties": { "KeycloakBackendClientSecret": { "$ref": "#/definitions/key" } } } }
+        ]
       }
     },
     "Prosuna": {
@@ -107,8 +139,16 @@
     "Keycloak": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["AdminUsername", "AdminEmail", "ExtraEnv"],
+      "required": ["Url", "Realm", "FrontendClientId", "BackendClientId", "AdminUsername", "AdminEmail", "ExtraEnv"],
       "properties": {
+        "Url": {
+          "description": "Public URL of an existing Keycloak including its relative path, without a trailing slash; empty deploys Keycloak.",
+          "type": "string",
+          "pattern": "^(https://[^/?#]+(/[^?#]*[^/?#])?)?$"
+        },
+        "Realm": { "type": "string", "minLength": 1 },
+        "FrontendClientId": { "type": "string", "minLength": 1 },
+        "BackendClientId": { "type": "string", "minLength": 1 },
         "AdminUsername": { "type": "string", "minLength": 1 },
         "AdminEmail": { "type": "string", "minLength": 1 },
         "ExtraEnv": { "$ref": "#/definitions/env" }
@@ -219,6 +259,16 @@
     "image": { "type": "string", "minLength": 1 },
     "key": { "type": "string", "minLength": 32 },
     "password": { "type": "string", "minLength": 12 },
+    "secretRef": {
+      "description": "A key of a Secret in the release namespace.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Secret", "Key"],
+      "properties": {
+        "Secret": { "type": "string", "minLength": 1 },
+        "Key": { "type": "string", "minLength": 1 }
+      }
+    },
     "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
     "quantity": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti)$" },
     "env": {
