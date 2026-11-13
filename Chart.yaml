@@ -4,4 +4,4 @@ description: Prosuna with Keycloak, PostgreSQL, RabbitMQ, Redis, ClamAV and Gote
 type: application
 version: 0.4.0
 # Keep in sync with Images.Prosuna in values.yaml.
-appVersion: "5.0.0-alpha-192"
+appVersion: "5.0.0-alpha-278"
