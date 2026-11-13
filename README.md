@@ -61,6 +61,24 @@ helm upgrade --install testing . --namespace testing --create-namespace \
 | `kyma.yaml`              | SAP BTP Kyma runtime with the CloudNativePG and RabbitMQ operators installed                               |
 | `external-services.yaml` | Keycloak and every backing service exist already; another ingress controller                               |
 
+## Upgrading
+
+### To Keycloak 26.8.2
+
+Since 26.8.2, Keycloak's Admin REST API only accepts tokens with the client scope `kc-admin-api`.
+The setup Job of a release installed with an older Keycloak authenticates with a deployment client
+that lacks this scope, so it fails with `401 Unauthorized`. Keycloak provides the scope only from
+26.8.2 on, so add it once by hand as soon as Keycloak runs 26.8.2, and run `helm upgrade` again if
+the setup Job has failed by then:
+
+1. Log in to the admin console of the `master` realm as `Keycloak.AdminUsername`.
+2. Open Clients → `deployment` → Client scopes → Add client scope.
+3. Select `kc-admin-api` and add it as `Default`.
+
+The setup Job then adds the scope to the staff realm's `backend` client itself. See
+[Upgrading To Keycloak 26.8.2](https://github.com/aivot-digital/keycloak-egov-plugins-setup#upgrading-to-keycloak-2682)
+in the setup README. This applies only to the chart's own Keycloak, not with `Keycloak.Url`.
+
 ## Backing services
 
 Leave a service's `Host` empty and the chart deploys it; set `Host` to use an existing one.
